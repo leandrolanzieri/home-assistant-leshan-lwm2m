@@ -1,0 +1,14 @@
+{
+  "domain": "dev_leshan_lwm2m",
+  "name": "Leshan LwM2M",
+  "codeowners": [],
+  "dependencies": [],
+  "documentation": "https://github.com/leandrolanzieri/leshan_lwm2m",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "config_flow": true,
+  "requirements": [
+    "aiohttp-sse-client==0.2.1"
+  ],
+  "version": "0.1.0"
+}
