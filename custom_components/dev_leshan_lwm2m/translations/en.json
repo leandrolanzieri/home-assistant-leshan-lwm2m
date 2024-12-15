@@ -5,7 +5,8 @@
                 "title": "Add new  LwM2M server",
                 "description": "Please enter the server details",
                 "data": {
-                    "server_uri": "Server URI"
+                    "server_uri": "Server URI",
+                    "new_device_scan_interval": "Scan interval for new devices (in seconds)"
                 }
             }
         },

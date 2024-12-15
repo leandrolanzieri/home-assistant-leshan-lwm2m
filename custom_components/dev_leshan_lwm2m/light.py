@@ -1,6 +1,5 @@
 from __future__ import annotations
 import logging
-import asyncio
 
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
@@ -8,6 +7,9 @@ from homeassistant.components.light import (
     LightEntityDescription,
     ColorMode
 )
+from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util.color import value_to_brightness, brightness_to_value
 
 from .const import (
@@ -16,150 +18,129 @@ from .const import (
     LWM2M_IPSO_LIGHT_CONTROL_DIMMER_RESOURCE_ID,
     LWM2M_IPSO_LIGHT_CONTROL_ON_OFF_RESOURCE_ID,
     LWM2M_IPSO_LIGHT_CONTROL_APPLICATION_TYPE_RESOURCE_ID,
-    LWM2M_DEVICE_OBJECT_ID,
-    LWM2M_DEVICE_MANUFACTURER_RESOURCE_ID,
-    LWM2M_DEVICE_FIRMWARE_VERSION_RESOURCE_ID,
 )
-from .leshan_client import LeshanClient, Lwm2mResourceValue, Lwm2mResourceValueType
-from homeassistant.helpers.device_registry import DeviceInfo
 
-from aiohttp_sse_client import client as sse_client
+from .leshan_client import Lwm2mClient, Lwm2mObjectInstance, Lwm2mResourceValue, Lwm2mResourceValueType
+from .leshan_lwm2m_entity import LeshanLwm2mEntity
+from .leshan_lwm2m_coordinator import LeshanLwm2mCoordinator
+
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    """Set up the sensor platform."""
-    leshan_client: LeshanClient = hass.data[DOMAIN][entry.entry_id]
 
-    devices = await leshan_client.list_clients()
+async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
+    """Set up the light platform."""
+        # this gets the leshan lwm2m data coordinator specified in __init__.py
+    coordinator: LeshanLwm2mCoordinator = hass.data[DOMAIN][config_entry.entry_id].coordinator
 
     light_entities = []
-    _LOGGER.debug(devices)
-
-    for device in devices:
-        endpoint = device.endpoint
-        for instance in device.object_instances:
+    clients = coordinator.data.clients
+    for client in clients:
+        for instance in client.object_instances:
             if instance.object_id == LWM2M_IPSO_LIGHT_CONTROL_OBJECT_ID:
-                try:
-                    name = (await leshan_client.read(
-                        endpoint=endpoint,
-                        object_id=instance.object_id,
-                        instance_id=instance.instance_id,
-                        resource_id=LWM2M_IPSO_LIGHT_CONTROL_APPLICATION_TYPE_RESOURCE_ID
-                    ))[0].value
-                except:
-                    name = f"{endpoint} {instance.instance_id}"
-
-                try:
-                    device = await leshan_client.read(
-                        endpoint=endpoint,
-                        object_id=LWM2M_DEVICE_OBJECT_ID,
-                        instance_id=0
-                    )
-
-                    for resource in device:
-                        if resource.resource_id == LWM2M_DEVICE_MANUFACTURER_RESOURCE_ID:
-                            device_manufacturer = resource.value
-                        if resource.resource_id == LWM2M_DEVICE_FIRMWARE_VERSION_RESOURCE_ID:
-                            firmware_version = resource.value
-                except:
-                    _LOGGER.error(f"Failed to read device information for {endpoint}")
-
-                light_entities.append(
-                    LeshanLwm2mLight(
-                        leshan_client=leshan_client,
-                        endpoint=endpoint,
-                        object_id=instance.object_id,
-                        instance_id=instance.instance_id,
-                        manufacturer=device_manufacturer,
-                        firmware_version=firmware_version,
-                        entity_description=LightEntityDescription(
-                            key=f"{endpoint}_{instance.object_id}_{instance.instance_id}",
-                            name=name,
-                            icon="mdi:lightbulb-variant-outline",
-                        )
-                    )
+                _LOGGER.debug(f"Found light control object on LwM2M client {client.endpoint}")
+                light = LeshanLwm2mLight(
+                    client=client,
+                    instance=instance,
+                    coordinator=coordinator,
+                    server_name=config_entry.title
                 )
+                await light.observe_resources()
+                await light.async_update_device_info()
+                light_entities.append(light)
 
     async_add_entities(light_entities)
 
-class LeshanLwm2mLight(LightEntity):
+
+class LeshanLwm2mLight(LeshanLwm2mEntity, LightEntity):
     BRIGHTNESS_SCALE = (1, 100)
-    should_poll = False
 
     def __init__(
             self,
-            leshan_client: LeshanClient,
-            endpoint: str,
-            object_id: int,
-            instance_id: int,
-            entity_description: LightEntityDescription,
-            manufacturer: str = "Unknown",
-            firmware_version: str = "Unknown",
+            client: Lwm2mClient,
+            instance: Lwm2mObjectInstance,
+            coordinator: LeshanLwm2mCoordinator,
+            server_name: str
     ) -> None:
-        super().__init__()
+        super().__init__(
+            client=client,
+            instance=instance,
+            coordinator=coordinator,
+            server_name=server_name
+        )
+
         self._color_mode = ColorMode.BRIGHTNESS
-        self._loop = asyncio.get_event_loop()
         self._light_control_status = False
         self._brightness = 0
-        self._endpoint = endpoint
-        self._object_id = object_id
-        self._instance_id = instance_id
-        self._leshan_client = leshan_client
-        self._manufacturer = manufacturer
-        self._firmware_version = firmware_version
-        self.entity_description = entity_description
+        self._name = None
 
-    async def async_added_to_hass(self) -> None:
-        """Run when this Entity has been added to HA."""
-        # Importantly for a push integration, the module that will be getting updates
-        # needs to notify HA of changes. The dummy device has a registercallback
-        # method, so to this we add the 'self.async_write_ha_state' method, to be
-        # called where ever there are changes.
-        # The call back registration is done once this entity is registered with HA
-        # (rather than in the __init__)
-        await self._leshan_client.observe(
-            endpoint=self._endpoint,
-            object_id=self._object_id,
-            instance_id=self._instance_id,
+    async def observe_resources(self):
+        await self.coordinator.leshan_client.observe(
+            client=self.client,
+            instance=self.instance,
             resource_id=LWM2M_IPSO_LIGHT_CONTROL_ON_OFF_RESOURCE_ID,
-            callback=self._async_observe_callback
+            callback=self._handle_on_off_update
         )
 
-        await self._leshan_client.observe(
-            endpoint=self._endpoint,
-            object_id=self._object_id,
-            instance_id=self._instance_id,
+        await self.coordinator.leshan_client.observe(
+            client=self.client,
+            instance=self.instance,
             resource_id=LWM2M_IPSO_LIGHT_CONTROL_DIMMER_RESOURCE_ID,
-            callback=self._async_observe_callback
+            callback=self._handle_dimmer_update
         )
 
-        await self._update()
-
-    async def _async_observe_callback(self, value: Lwm2mResourceValue) -> None:
+    async def _handle_on_off_update(self, client: Lwm2mClient, instance: Lwm2mObjectInstance, value: Lwm2mResourceValue) -> None:
         """Handle value updates."""
-        if value.resource_id == LWM2M_IPSO_LIGHT_CONTROL_ON_OFF_RESOURCE_ID:
-            self._light_control_status = value.value
-        elif value.resource_id == LWM2M_IPSO_LIGHT_CONTROL_DIMMER_RESOURCE_ID:
-            self._brightness = value.value
+        self._light_control_status = value.value
         self.async_write_ha_state()
 
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return the device info."""
-        return DeviceInfo(
-            identifiers={
-                # Serial numbers are unique identifiers within a specific domain
-                (DOMAIN, self.unique_id)
-            },
-            name=self.name,
-            manufacturer=self._manufacturer,
-            sw_version=self._firmware_version,
+    async def _handle_dimmer_update(self, client: Lwm2mClient, instance: Lwm2mObjectInstance, value: Lwm2mResourceValue) -> None:
+        """Handle value updates."""
+        self._brightness = value.value
+        self.async_write_ha_state()
+
+    async def async_update_device_info(self):
+        await super().async_update_device_info()
+        await self.read_light_info()
+
+        self.entity_description = LightEntityDescription(
+            key=f"{self.client.endpoint}_{self.instance.object_id}_{self.instance.instance_id}",
+            name=self._name,
+            icon="mdi:lightbulb-variant-outline",
         )
 
-    @property
-    def unique_id(self) -> str:
-        return f"{self._endpoint}_{self._object_id}_{self._instance_id}"
+    async def read_light_info(self):
+        """Read the light state from the device object.
+
+        This sets the light name.
+        """
+        try:
+            light = await self.coordinator.leshan_client.read(
+                endpoint=self.client.endpoint,
+                object_id=self.instance.object_id,
+                instance_id=self.instance.instance_id,
+                resource_id=LWM2M_IPSO_LIGHT_CONTROL_APPLICATION_TYPE_RESOURCE_ID
+            )
+            assert len(light) == 1
+            self._name = light[0].value
+        except Exception as e:
+            _LOGGER.error(
+                f"Failed to read light information for {self.client.endpoint}: {e}")
+            return
+
+        try:
+            light = await self.coordinator.leshan_client.read(
+                endpoint=self.client.endpoint,
+                object_id=self.instance.object_id,
+                instance_id=self.instance.instance_id,
+                resource_id=LWM2M_IPSO_LIGHT_CONTROL_ON_OFF_RESOURCE_ID
+            )
+            assert len(light) == 1
+            self._light_control_status = light[0].value
+        except Exception as e:
+            _LOGGER.error(
+                f"Failed to read light status for {self.client.endpoint}: {e}")
+            return
 
     @property
     def is_on(self) -> bool:
@@ -181,23 +162,6 @@ class LeshanLwm2mLight(LightEntity):
     def color_mode(self) -> ColorMode | None:
         return self._color_mode
 
-    async def _update(self):
-        values = await self._leshan_client.read(
-            endpoint=self._endpoint,
-            object_id=self._object_id,
-            instance_id=self._instance_id,
-            resource_id=None
-        )
-
-        for value in values:
-            if value.resource_id == LWM2M_IPSO_LIGHT_CONTROL_ON_OFF_RESOURCE_ID:
-                self._light_control_status = value.value
-            elif value.resource_id == LWM2M_IPSO_LIGHT_CONTROL_DIMMER_RESOURCE_ID:
-                self._brightness = value.value
-
-        value = values[0].value
-        self._light_control_status = value
-
     async def async_turn_on(self, **kwargs: any) -> None:
         values = [
             Lwm2mResourceValue(
@@ -208,7 +172,8 @@ class LeshanLwm2mLight(LightEntity):
         ]
         # check if ATTR_BRIGHTNESS is in kwargs
         if ATTR_BRIGHTNESS in kwargs:
-            brightness_in_range = brightness_to_value(self.BRIGHTNESS_SCALE, kwargs[ATTR_BRIGHTNESS])
+            brightness_in_range = brightness_to_value(
+                self.BRIGHTNESS_SCALE, kwargs[ATTR_BRIGHTNESS])
             values.append(
                 Lwm2mResourceValue(
                     resource_id=LWM2M_IPSO_LIGHT_CONTROL_DIMMER_RESOURCE_ID,
@@ -216,13 +181,17 @@ class LeshanLwm2mLight(LightEntity):
                     value=brightness_in_range
                 )
             )
+            self._brightness = brightness_in_range
 
-        await self._leshan_client.write(
-            endpoint=self._endpoint,
-            object_id=self._object_id,
-            instance_id=self._instance_id,
+        await self.coordinator.leshan_client.write(
+            endpoint=self.client.endpoint,
+            object_id=self.instance.object_id,
+            instance_id=self.instance.instance_id,
             values=values
         )
+
+        self._light_control_status = True
+        self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: any) -> None:
         value = Lwm2mResourceValue(
@@ -230,9 +199,12 @@ class LeshanLwm2mLight(LightEntity):
             type=Lwm2mResourceValueType.BOOLEAN,
             value=False
         )
-        await self._leshan_client.write(
-            endpoint=self._endpoint,
-            object_id=self._object_id,
-            instance_id=self._instance_id,
+        await self.coordinator.leshan_client.write(
+            endpoint=self.client.endpoint,
+            object_id=self.instance.object_id,
+            instance_id=self.instance.instance_id,
             values=[value]
         )
+
+        self._light_control_status = False
+        self.async_write_ha_state()

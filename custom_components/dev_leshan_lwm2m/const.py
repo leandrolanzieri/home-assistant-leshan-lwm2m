@@ -2,7 +2,7 @@
 
 DOMAIN = "dev_leshan_lwm2m"
 
-CONF_SERVER_URI = "server_uri"
+CONF_NEW_DEVICE_SCAN_INTERVAL_DEFAULT = 60
 
 LWM2M_DEVICE_OBJECT_ID = 3
 

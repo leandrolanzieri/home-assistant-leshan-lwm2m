@@ -6,6 +6,7 @@ from homeassistant.components.switch import SwitchEntity, SwitchEntityDescriptio
 
 from .const import (
     DOMAIN,
+    CONF_KEY_LESHAN_CLIENT,
     LWM2M_DEVICE_OBJECT_ID,
     LWM2M_DEVICE_MANUFACTURER_RESOURCE_ID,
     LWM2M_DEVICE_FIRMWARE_VERSION_RESOURCE_ID,
@@ -20,16 +21,14 @@ from aiohttp_sse_client import client as sse_client
 
 _LOGGER = logging.getLogger(__name__)
 
+
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up the sensor platform."""
-    leshan_client: LeshanClient = hass.data[DOMAIN][entry.entry_id]
-
-    devices = await leshan_client.list_clients()
+    leshan_client: LeshanClient = hass.data[DOMAIN][entry.entry_id][CONF_KEY_LESHAN_CLIENT]
 
     switch_entities = []
-    _LOGGER.debug(devices)
 
-    for device in devices:
+    for device in leshan_client.lwm2m_clients:
         endpoint = device.endpoint
         for instance in device.object_instances:
             if instance.object_id == LWM2M_IPSO_ON_OFF_SWITCH_OBJECT_ID:
@@ -57,7 +56,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         if resource.resource_id == LWM2M_DEVICE_FIRMWARE_VERSION_RESOURCE_ID:
                             firmware_version = resource.value
                 except:
-                    _LOGGER.error(f"Failed to read device information for {endpoint}")
+                    _LOGGER.error(
+                        f"Failed to read device information for {endpoint}")
 
                 switch_entities.append(
                     LeshanLwm2mSwitch(
@@ -68,7 +68,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                         manufacturer=device_manufacturer,
                         firmware_version=firmware_version,
                         entity_description=SwitchEntityDescription(
-                            key=f"{endpoint}_{instance.object_id}_{instance.instance_id}",
+                            key=f"{endpoint}_{instance.object_id}_{
+                                instance.instance_id}",
                             name=name,
                             icon="mdi:light-switch",
                             device_class=SwitchDeviceClass.SWITCH,
@@ -77,6 +78,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 )
 
     async_add_entities(switch_entities)
+
 
 class LeshanLwm2mSwitch(SwitchEntity):
     should_poll = False
