@@ -13,8 +13,6 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.typing import DiscoveryInfoType
 
-from custom_components.dev_leshan_lwm2m.leshan_client.lwm2m_client import Lwm2mClient
-
 from .const import CONF_NEW_DEVICE_SCAN_INTERVAL_DEFAULT, DOMAIN
 from .leshan_client import LeshanClient
 
@@ -100,54 +98,6 @@ class LeshanLwm2mConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
         self.hass.config_entries.async_schedule_reload(entry_id)
         return self.async_abort(reason="already_configured")
-
-    # async def _async_handle_discovery(self) -> ConfigFlowResult:
-    #     """Handle any discovery."""
-    #     _LOGGER.debug("_async_handle_discovery")
-    #     client = self._discovered_client
-    #     await self.async_set_unique_id(client.endpoint)
-
-    #     for entry in self._async_current_entries(include_ignore=False):
-    #         _LOGGER.debug("Checking entry", extra={"entry": entry})
-    #         if entry.unique_id == client.endpoint:
-    #             self.hass.config_entries.async_schedule_reload(entry.entry_id)
-    #             return self.async_abort(reason="already_configured")
-
-    #     if self.hass.config_entries.flow.async_has_matching_flow(self):
-    #         _LOGGER.debug("Already in progress")
-    #         return self.async_abort(reason="already_in_progress")
-    #     # Handled ignored case since _async_current_entries
-    #     # is called with include_ignore=False
-    #     self._abort_if_unique_id_configured()
-    #     return await self.async_step_discovery_confirm()
-
-    # async def async_step_discovery_confirm(
-    #     self, _: dict[str, Any] | None = None
-    # ) -> ConfigFlowResult:
-    #     """Confirm discovery."""
-    #     _LOGGER.debug("async_step_discovery_confirm")
-    #     self.context["title_placeholders"] = _placeholders_from_client(
-    #         self._discovered_client
-    #     )
-    #     return await self.async_step_discovered_connection()
-
-    # async def async_step_discovered_connection(
-    #     self, _: dict[str, Any] | None = None
-    # ) -> ConfigFlowResult:
-    #     """Handle connecting the device when we have a discovery."""
-    #     _LOGGER.debug("async_step_discovered_connection")
-    #     errors: dict[str, str] | None = {}
-    #     client = self._discovered_client
-
-    #     return self.async_show_form(
-    #         step_id="discovered_client",
-    #         errors=errors,
-    #         description_placeholders=_placeholders_from_client(client),
-    #     )
-
-
-def _placeholders_from_client(client: Lwm2mClient) -> dict[str, str]:
-    return {"endpoint": client.endpoint}
 
 
 class CannotConnectError(HomeAssistantError):
