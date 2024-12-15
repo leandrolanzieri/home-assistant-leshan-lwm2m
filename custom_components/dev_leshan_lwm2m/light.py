@@ -107,7 +107,6 @@ class LeshanLwm2mLight(LeshanLwm2mEntity, LightEntity):
             server_name=server_name,
         )
 
-        self._color_mode = ColorMode.BRIGHTNESS
         self._light_control_status: bool = False
         self._brightness: int = 0
         self._name: str = "Unknown Light"
@@ -223,12 +222,12 @@ class LeshanLwm2mLight(LeshanLwm2mEntity, LightEntity):
     @property
     def supported_color_modes(self) -> set[ColorMode] | None:
         """Flag supported color modes."""
-        return set(ColorMode.BRIGHTNESS)
+        return {ColorMode.BRIGHTNESS}
 
     @property
     def color_mode(self) -> ColorMode | None:
         """Return the color mode of the light."""
-        return self._color_mode
+        return ColorMode.BRIGHTNESS
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the light on."""
