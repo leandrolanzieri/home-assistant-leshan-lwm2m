@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from asyncio import Task
 import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -39,6 +40,7 @@ class RuntimeData:
 
     coordinator: LeshanLwm2mCoordinator
     cancel_update_listener: Callable
+    discovery_task: Task[None]
     known_clients: list[Lwm2mClient] = field(default_factory=list)
 
 
@@ -73,7 +75,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         else:
             _LOGGER.info("Client is known", extra={"client": client})
 
-    hass.async_create_task(
+    discovery_task = hass.async_create_background_task(
         target=coordinator.leshan_client.listen_registrations(
             _async_handle_client_registration
         ),
@@ -84,6 +86,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     hass.data[DOMAIN][config_entry.entry_id] = RuntimeData(
         coordinator=coordinator,
         cancel_update_listener=cancel_update_listener,
+        discovery_task=discovery_task,
     )
 
     # setup platforms, this calls async_setup_entry for each platform
@@ -95,6 +98,7 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> 
     """Unload a config entry."""
     # remove the config options update listener
     hass.data[DOMAIN][config_entry.entry_id].cancel_update_listener()
+    hass.data[DOMAIN][config_entry.entry_id].discovery_task.cancel()
 
     # unload platforms
     unload_ok = await hass.config_entries.async_unload_platforms(
