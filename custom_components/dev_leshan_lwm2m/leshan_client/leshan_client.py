@@ -1,32 +1,36 @@
 """Asynchronous Leshan client for Python."""
+
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
-import aiohttp
 import json
 import logging
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from yarl import URL
-from typing import Awaitable, Callable
+import aiohttp
 from aiohttp_sse_client import client as sse_client
+from yarl import URL
 
 from .exceptions import (
-    LeshanClientError,
-    LeshanClientEmptyResponseError,
     LeshanClientConnectionError,
     LeshanClientConnectionTimeoutError,
+    LeshanClientEmptyResponseError,
+    LeshanClientError,
 )
 from .lwm2m_client import Lwm2mClient, Lwm2mObjectInstance
 from .objects import Lwm2mResourceValue
 
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
 _LOGGER = logging.getLogger(__name__)
+
 
 @dataclass
 class ObservationEntry:
-    """
-    An observation entry to keep track of the resources being observed.
-    """
+    """An observation entry to keep track of the resources being observed."""
+
     client: Lwm2mClient
     "The client of the resource being observed."
 
@@ -36,7 +40,9 @@ class ObservationEntry:
     resource_id: int
     "The resource ID of the resource being observed."
 
-    callback: Callable[[LeshanClient, Lwm2mObjectInstance, Lwm2mResourceValue], Awaitable[None]]
+    callback: Callable[
+        [Lwm2mClient, Lwm2mObjectInstance, Lwm2mResourceValue], Awaitable[None]
+    ]
     "The callback to call when the resource changes."
 
 
@@ -47,13 +53,27 @@ class LeshanClient:
     Args:
         host: The host of the Leshan server.
         request_timeout: The timeout for requests to the server.
-        session: An aiohttp session to use for requests. If None, a new session is created.
+        session: An aiohttp session to use for requests. If None, a new session is
+                 created.
+
     """
-    API_PATH = "/api"
+
+    API_PATH = "api"
     API_CLIENTS_PATH = f"{API_PATH}/clients"
 
-    def __init__(self, host: str, request_timeout: float = 5.0, session: aiohttp.ClientSession | None = None):
-        self._host = host
+    def __init__(
+        self,
+        host: str,
+        request_timeout: float = 5.0,
+        session: aiohttp.ClientSession | None = None,
+    ) -> None:
+        """Initialize the Leshan client."""
+        self._host = URL(host)
+
+        if not self._host.scheme:
+            msg = "Host must include a scheme (http/https)"
+            raise ValueError(msg)
+
         self._request_timeout = request_timeout
         self._session = session
         self._endpoint_notification_tasks: dict[str, asyncio.Task] = {}
@@ -63,24 +83,29 @@ class LeshanClient:
         self.lwm2m_clients: list[Lwm2mClient] = []
         """The LwM2M clients registered with the Leshan server."""
 
-    async def _listen_endpoint_notifications(self, endpoint: str, stop_event: asyncio.Event):
+    async def _listen_endpoint_notifications(
+        self, endpoint: str, stop_event: asyncio.Event
+    ) -> None:
         """
         Listen for notifications from a LwM2M client.
 
         Args:
             endpoint: The endpoint of the client to listen for notifications from.
             stop_event: The event to stop listening for notifications.
+
         """
-        path = f"{self.API_PATH}/event?ep={endpoint}"
-        uri = f"http://{self._host}{path}"
+        path = f"{self.API_PATH}/event"
+        uri = self._host.with_path(path).with_query({"ep": endpoint})
 
         while not stop_event.is_set():
             try:
-                async with sse_client.EventSource(uri) as event_source:
+                async with sse_client.EventSource(str(uri)) as event_source:
                     _LOGGER.debug(f"Listening for notifications on {endpoint}")
                     async for event in event_source:
                         if event.type != "NOTIFICATION":
-                            _LOGGER.debug(f"Ignoring event type {event.type} from {endpoint}")
+                            _LOGGER.debug(
+                                f"Ignoring event type {event.type} from {endpoint}"
+                            )
                             continue
 
                         data = json.loads(event.data)
@@ -97,38 +122,41 @@ class LeshanClient:
                             value=data["val"]["value"],
                         )
 
-
                         for observation in self._observations:
-                            if observation.client.endpoint == data["ep"] and \
-                                    observation.instance.object_id == object_id and \
-                                    observation.instance.instance_id == instance_id and \
-                                    observation.resource_id == resource_id:
-
+                            if (
+                                observation.client.endpoint == data["ep"]
+                                and observation.instance.object_id == object_id
+                                and observation.instance.instance_id == instance_id
+                                and observation.resource_id == resource_id
+                            ):
                                 await observation.callback(
-                                    observation.client,
-                                    observation.instance,
-                                    value
+                                    observation.client, observation.instance, value
                                 )
             except TimeoutError:
                 pass
             except Exception as e:
-                _LOGGER.error(f"Error listening for notifications on {endpoint}: {e}")
-                _LOGGER.debug(f"Retrying in 5 seconds")
+                _LOGGER.exception(
+                    f"Error listening for notifications on {endpoint}"  # noqa: G004
+                )
+                _LOGGER.debug("Retrying in 5 seconds")
                 await asyncio.sleep(5)
 
-    async def listen_registrations(self, callback: Callable[[Lwm2mClient], Awaitable[None]]):
+    async def listen_registrations(
+        self, callback: Callable[[Lwm2mClient], Awaitable[None]]
+    ) -> None:
         """
         Listen for new client registrations.
 
         Args:
             callback: The callback to call when a new client is registered.
+
         """
         path = f"{self.API_PATH}/event"
-        uri = f"http://{self._host}{path}"
+        uri = self._host.with_path(path)
 
         while True:
             try:
-                async with sse_client.EventSource(uri) as event_source:
+                async with sse_client.EventSource(str(uri)) as event_source:
                     _LOGGER.debug("Listening for registrations")
                     async for event in event_source:
                         if event.type != "REGISTRATION":
@@ -153,7 +181,7 @@ class LeshanClient:
                         )
 
                         await callback(client)
-            except TimeoutError as e:
+            except TimeoutError:
                 pass
 
             except Exception as e:
@@ -161,19 +189,21 @@ class LeshanClient:
                 _LOGGER.debug(f"Retrying in 5 seconds")
                 await asyncio.sleep(5)
 
-    async def test_server(self):
+    async def test_server(self) -> None:
         """
-        Test the connection to the Leshan server. The method raises an exception if the connection fails.
+        Test the connection to the Leshan server.
 
         Raises:
             LesanClientError: If the server returns an error.
             LesanClientConnectionError: If there is an error connecting to the server.
             LesanClientConnectionTimeoutError: If the connection to the server times out.
             LeshanClientEmptyResponseError: If the server returns an empty response.
+
         """
         response = await self.request(self.API_CLIENTS_PATH)
         if response is None:
-            raise LeshanClientEmptyResponseError("Empty response from server")
+            msg = "Empty response from server"
+            raise LeshanClientEmptyResponseError(msg)
 
     async def get_clients(self) -> list[Lwm2mClient]:
         """
@@ -186,7 +216,8 @@ class LeshanClient:
             LeshanClientEmptyResponseError: If the server returns an empty response.
             LesanClientError: If the server returns an error.
             LesanClientConnectionError: If there is an error connecting to the server.
-            LesanClientConnectionTimeoutError: If the connection to the server times out.
+            LesanClientConnectionTimeoutError: If the connection times out.
+
         """
         response = await self.request(self.API_CLIENTS_PATH)
         clients = []
@@ -214,14 +245,18 @@ class LeshanClient:
 
         return self.lwm2m_clients
 
-    async def read(self, endpoint: str, object_id: int, instance_id: int,
-                   resource_id: int = None) -> list[Lwm2mResourceValue]:
+    async def read(
+        self,
+        client: Lwm2mClient,
+        object_instance: Lwm2mObjectInstance,
+        resource_id: int | None = None,
+    ) -> list[Lwm2mResourceValue]:
         """
         Read a resource from a LwM2M client.
 
         Args:
-            object_id: The object ID.
-            instance_id: The instance ID.
+            client: The client to read the resource from.
+            object_instance: The object instance to read the resource from.
             resource_id: The resource ID. If None, all resources are read.
 
         Returns:
@@ -231,75 +266,95 @@ class LeshanClient:
             LeshanClientEmptyResponseError: If the server returns an empty response.
             LesanClientError: If the server returns an error.
             LesanClientConnectionError: If there is an error connecting to the server.
-            LesanClientConnectionTimeoutError: If the connection to the server times out.
-        """
-        uri = f"{self.API_CLIENTS_PATH}/{endpoint}/{object_id}/{instance_id}"
-        if resource_id:
-            uri += f"/{resource_id}"
+            LesanClientConnectionTimeoutError: If the connection times out.
 
-        response = await self.request(uri)
+        """
+        path = f"{self.API_CLIENTS_PATH}"
+        path += f"/{client.endpoint}"
+        path += f"/{object_instance.object_id}"
+        path += f"/{object_instance.instance_id}"
+
+        if resource_id:
+            path += f"/{resource_id}"
+
+        response = await self.request(path)
         _LOGGER.debug(response)
         if response is None:
-            raise LeshanClientEmptyResponseError("Empty response from server")
+            msg = "Empty response from server"
+            raise LeshanClientEmptyResponseError(msg)
 
         values: list[Lwm2mResourceValue] = []
         if resource_id:
-            values.append(Lwm2mResourceValue(
-                resource_id=response["content"]["id"],
-                type=response["content"]["type"],
-                value=response["content"]["value"],
-            ))
+            values.append(
+                Lwm2mResourceValue(
+                    resource_id=response["content"]["id"],
+                    type=response["content"]["type"],
+                    value=response["content"]["value"],
+                )
+            )
         else:
             for resource in response["content"]["resources"]:
-                values.append(Lwm2mResourceValue(
-                    resource_id=resource["id"],
-                    type=resource["type"],
-                    value=resource["value"],
-                ))
+                values.append(
+                    Lwm2mResourceValue(
+                        resource_id=resource["id"],
+                        type=resource["type"],
+                        value=resource["value"],
+                    )
+                )
 
         return values
 
-    async def write(self, endpoint: str, object_id: int, instance_id: int, values: list[Lwm2mResourceValue]):
+    async def write(
+        self,
+        client: Lwm2mClient,
+        object_instance: Lwm2mObjectInstance,
+        values: list[Lwm2mResourceValue],
+    ) -> None:
         """
         Write a resource from a LwM2M client.
 
         Args:
-            object_id: The object ID.
-            instance_id: The instance ID.
+            client: The client to write the resource to.
+            object_instance: The object instance to write the resource to.
             values: The values to write.
 
         Raises:
             LeshanClientEmptyResponseError: If the server returns an empty response.
             LesanClientError: If the server returns an error.
             LesanClientConnectionError: If there is an error connecting to the server.
-            LesanClientConnectionTimeoutError: If the connection to the server times out.
-        """
-        uri = f"{self.API_CLIENTS_PATH}/{endpoint}/{object_id}/{instance_id}"
+            LesanClientConnectionTimeoutError: If the connection times out.
 
-        data = {
-            "id": instance_id,
-            "kind": "instance",
-            "resources": []
-        }
+        """
+        path = f"{self.API_CLIENTS_PATH}"
+        path += f"/{client.endpoint}"
+        path += f"/{object_instance.object_id}"
+        path += f"/{object_instance.instance_id}"
+
+        data = {"id": object_instance.instance_id, "kind": "instance", "resources": []}
 
         for value in values:
-            data["resources"].append({
-                "id": value.resource_id,
-                "kind": "singleResource",
-                "type": value.type,
-                "value": value.value,
-            })
+            data["resources"].append(
+                {
+                    "id": value.resource_id,
+                    "kind": "singleResource",
+                    "type": value.type,
+                    "value": value.value,
+                }
+            )
 
-        response = await self.request(uri, method="PUT", data=data)
+        response = await self.request(path, method="PUT", data=data)
         if response is None:
-            raise LeshanClientEmptyResponseError("Empty response from server")
+            msg = "Empty response from server"
+            raise LeshanClientEmptyResponseError(msg)
 
-    async def request(self, uri: str = "", method: str = "GET", data: dict | None = None):
+    async def request(
+        self, path: str = "", method: str = "GET", data: dict | None = None
+    ) -> dict | str:
         """
         Make an HTTP request to the Leshan server.
 
         Args:
-            uri: The URI to request.
+            path: The path to request.
             method: The HTTP method to use.
             data: The data to send with the request.
 
@@ -310,8 +365,9 @@ class LeshanClient:
             LesanClientError: If the server returns an error.
             LesanClientConnectionError: If there is an error connecting to the server.
             LesanClientConnectionTimeoutError: If the connection to the server times out.
+
         """
-        url = URL.build(scheme="http", host=self._host, path=uri)
+        url = self._host.with_path(path)
 
         headers = {
             "Accept": "application/json, text/plain, */*",
@@ -357,7 +413,15 @@ class LeshanClient:
             message = f"Error connecting to server at {self._host}"
             raise LeshanClientConnectionError(message) from e
 
-    async def observe(self, client: Lwm2mClient, instance: Lwm2mObjectInstance, resource_id: int, callback: Callable[[Lwm2mResourceValue], Awaitable[None]]):
+    async def observe(
+        self,
+        client: Lwm2mClient,
+        instance: Lwm2mObjectInstance,
+        resource_id: int,
+        callback: Callable[
+            [Lwm2mClient, Lwm2mObjectInstance, Lwm2mResourceValue], Awaitable[None]
+        ],
+    ) -> None:
         """
         Observe a resource from a LwM2M client.
 
@@ -366,6 +430,7 @@ class LeshanClient:
             instance_id: The instance ID.
             resource_id: The resource ID.
             callback: The callback to call when the resource changes.
+
         """
         obs_entry = ObservationEntry(
             client=client,
@@ -379,14 +444,25 @@ class LeshanClient:
         try:
             # leshan will trigger notifications per endpoint, not per resource or object
             # check if we are already listening for notifications on this endpoint
-            if not any(obs.client.endpoint == obs_entry.client.endpoint for obs in self._observations):
+            if not any(
+                obs.client.endpoint == obs_entry.client.endpoint
+                for obs in self._observations
+            ):
                 stop_event = asyncio.Event()
-                self._endpoint_notification_stop_events[obs_entry.client.endpoint] = stop_event
+                self._endpoint_notification_stop_events[obs_entry.client.endpoint] = (
+                    stop_event
+                )
 
-                task = loop.create_task(self._listen_endpoint_notifications(obs_entry.client.endpoint, stop_event))
+                task = loop.create_task(
+                    self._listen_endpoint_notifications(
+                        obs_entry.client.endpoint, stop_event
+                    )
+                )
                 self._endpoint_notification_tasks[obs_entry.client.endpoint] = task
         except Exception as e:
-            _LOGGER.error(f"Failed to listen for notifications from {obs_entry.client}: {e}")
+            _LOGGER.error(
+                f"Failed to listen for notifications from {obs_entry.client}: {e}"
+            )
 
         self._observations.append(obs_entry)
         await self._observe_resource(
@@ -395,40 +471,54 @@ class LeshanClient:
             resource_id=obs_entry.resource_id,
         )
 
-    async def cancel_observe(self, client: Lwm2mClient, instance: Lwm2mObjectInstance, resource_id: int):
+    async def cancel_observe(
+        self,
+        client: Lwm2mClient,
+        object_instance: Lwm2mObjectInstance,
+        resource_id: int,
+    ) -> None:
         """
         Cancel observing a resource from a LwM2M client.
 
         Args:
-            object_id: The object ID.
-            instance_id: The instance ID.
+            client: The client to cancel the observe on.
+            object_instance: The object instance to cancel the observe on.
             resource_id: The resource ID.
+
         """
         # find the observation entry
         obs_entry = None
         for obs in self._observations:
-            if obs.client.endpoint == client.endpoint and \
-                    obs.instance.object_id == instance.object_id and \
-                    obs.instance.instance_id == instance.instance_id and \
-                    obs.resource_id == resource_id:
+            if (
+                obs.client.endpoint == client.endpoint
+                and obs.instance.object_id == object_instance.object_id
+                and obs.instance.instance_id == object_instance.instance_id
+                and obs.resource_id == resource_id
+            ):
                 obs_entry = obs
                 break
         else:
             return
 
-        await self._cancel_observe(client, instance, resource_id)
+        await self._cancel_observe(client, object_instance, resource_id)
         self._observations.remove(obs_entry)
 
         # cancel the endpoint notification task if there are no more observations for this endpoint
-        if not any(obs.client.endpoint == obs_entry.client.endpoint for obs in self._observations):
-            stop_event = self._endpoint_notification_stop_events.pop(obs_entry.client.endpoint)
+        if not any(
+            obs.client.endpoint == obs_entry.client.endpoint
+            for obs in self._observations
+        ):
+            stop_event = self._endpoint_notification_stop_events.pop(
+                obs_entry.client.endpoint
+            )
             stop_event.set()
 
             task = self._endpoint_notification_tasks.pop(obs.client.endpoint)
             task.cancel()
 
-
-    async def _cancel_observe(self, client: Lwm2mClient, instance: Lwm2mObjectInstance, resource_id: int):
+    async def _cancel_observe(
+        self, client: Lwm2mClient, instance: Lwm2mObjectInstance, resource_id: int
+    ) -> None:
         """
         Actively cancel observing a resource from a LwM2M client.
 
@@ -436,6 +526,7 @@ class LeshanClient:
             client: The client to cancel the observe on.
             instance: The instance to cancel the observe on.
             resource_id: The resource ID to cancel the observe on.
+
         """
         path = f"{self.API_CLIENTS_PATH}"
         path += f"/{client.endpoint}/{instance.object_id}/{instance.instance_id}/{resource_id}"
@@ -448,7 +539,9 @@ class LeshanClient:
         except Exception as e:
             _LOGGER.error(f"Failed to cancel observe {path}: {e}")
 
-    async def _observe_resource(self, client: Lwm2mClient, instance: Lwm2mObjectInstance, resource_id: int):
+    async def _observe_resource(
+        self, client: Lwm2mClient, instance: Lwm2mObjectInstance, resource_id: int
+    ):
         """
         Observe a resource from a LwM2M client.
 
@@ -467,7 +560,6 @@ class LeshanClient:
             _LOGGER.error(f"Failed to observe {path}: {e}")
         except Exception as e:
             _LOGGER.error(f"Failed to observe {path}: {e}")
-
 
     async def close(self):
         """

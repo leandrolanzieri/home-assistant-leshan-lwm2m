@@ -8,10 +8,7 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.exceptions import HomeAssistantError
 
 import voluptuous as vol
-from homeassistant.const import (
-    CONF_HOST,
-    CONF_SCAN_INTERVAL
-)
+from homeassistant.const import CONF_HOST, CONF_SCAN_INTERVAL
 from . import RuntimeData
 from .const import DOMAIN, CONF_NEW_DEVICE_SCAN_INTERVAL_DEFAULT
 from .leshan_client import LeshanClient, Lwm2mClient
@@ -23,16 +20,15 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Required(
             CONF_HOST,
         ): selector.TextSelector(
-            selector.TextSelectorConfig(
-                type=selector.TextSelectorType.URL
-            ),
+            selector.TextSelectorConfig(type=selector.TextSelectorType.URL),
         ),
         vol.Required(
             CONF_SCAN_INTERVAL,
             default=CONF_NEW_DEVICE_SCAN_INTERVAL_DEFAULT,
-        ): int
+        ): int,
     }
 )
+
 
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
     """Validate the user input allows us to connect.
@@ -40,23 +36,27 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
     leshan_client = LeshanClient(
-        host=data[CONF_HOST],
-        session=async_create_clientsession(hass)
+        host=data[CONF_HOST], session=async_create_clientsession(hass)
     )
 
     try:
         await leshan_client.test_server()
     except Exception as e:
+        _LOGGER.error(f"Cannot connect to the server: {e}")
         raise CannotConnect from e
 
     return {"title": f"Leshan LwM2M Server - ({data[CONF_HOST]})"}
 
+
 class LeshanLwm2mConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Leshan LWM2M config flow."""
+
     VERSION = 1
     MINOR_VERSION = 0
 
-    async def async_step_user(self, user_input: dict | None = None) -> config_entries.FlowResult:
+    async def async_step_user(
+        self, user_input: dict | None = None
+    ) -> config_entries.FlowResult:
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -87,10 +87,7 @@ class LeshanLwm2mConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_discovery_confirm(self, discovery_info):
         """Test discovery confirm step."""
-        return self.async_create_entry(
-            title="Test Title", data={"token": "abcd"}
-        )
-
+        return self.async_create_entry(title="Test Title", data={"token": "abcd"})
 
     # async def async_step_finish(
     #     self, discovered_client: Lwm2mClient
@@ -101,6 +98,7 @@ class LeshanLwm2mConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     #         title=discovered_client.endpoint,
     #         data={CONF_HOST: discovered_client.host},
     #     )
+
 
 # async def _async_new_clients_available(hass: HomeAssistant) -> bool:
 #     """Check if there are new clients available."""
@@ -126,6 +124,8 @@ class LeshanLwm2mConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 #     _async_new_clients_available,
 # )
 
+
 class CannotConnect(HomeAssistantError):
     """Error to indicate we cannot connect."""
+
     pass

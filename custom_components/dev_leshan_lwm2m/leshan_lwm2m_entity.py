@@ -17,16 +17,18 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class LeshanLwm2mEntity(CoordinatorEntity):
     """Base class for Leshan LWM2M entities."""
+
     _attr_should_poll = False
 
     def __init__(
-            self,
-            client: Lwm2mClient,
-            instance: Lwm2mObjectInstance,
-            coordinator: LeshanLwm2mCoordinator,
-            server_name: str
+        self,
+        client: Lwm2mClient,
+        instance: Lwm2mObjectInstance,
+        coordinator: LeshanLwm2mCoordinator,
+        server_name: str,
     ) -> None:
         super().__init__(coordinator)
         self.client = client
@@ -53,24 +55,27 @@ class LeshanLwm2mEntity(CoordinatorEntity):
         self.entity_description = None
         """The entity description."""
 
-    async def async_update_device_info(self):
+    async def async_update_device_info(self) -> None:
         """Update the device information."""
         await self.read_device_info()
 
-    async def read_device_info(self):
-        """Read device information from the device object.
+    async def read_device_info(self) -> None:
+        """
+        Read device information from the device object.
 
         This sets the manufacturer and firmware version of the device.
         """
         try:
+            instance = Lwm2mObjectInstance(
+                object_id=LWM2M_DEVICE_OBJECT_ID, instance_id=0
+            )
             device = await self.coordinator.leshan_client.read(
-                endpoint=self.client.endpoint,
-                object_id=LWM2M_DEVICE_OBJECT_ID,
-                instance_id=0
+                client=self.client, object_instance=instance
             )
         except Exception as e:
             _LOGGER.error(
-                f"Failed to read device information for {self.client.endpoint}: {e}")
+                f"Failed to read device information for {self.client.endpoint}: {e}"
+            )
             return
 
         for resource in device:
@@ -85,14 +90,12 @@ class LeshanLwm2mEntity(CoordinatorEntity):
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
         return DeviceInfo(
-            identifiers={
-                (DOMAIN, self.client.endpoint)
-            },
+            identifiers={(DOMAIN, self.client.endpoint)},
             name=self.client.endpoint,
             manufacturer=self.manufacturer,
             sw_version=self.firmware_version,
             hw_version=self.hardware_version,
-            via_device=(DOMAIN, self.server_name)
+            via_device=(DOMAIN, self.server_name),
         )
 
     @property

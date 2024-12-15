@@ -6,27 +6,33 @@ from homeassistant.core import HomeAssistant, DOMAIN
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
-from homeassistant.const import (
-    CONF_HOST,
-    CONF_SCAN_INTERVAL
+from homeassistant.const import CONF_HOST, CONF_SCAN_INTERVAL
+
+from .leshan_client import (
+    LeshanClient,
+    Lwm2mClient,
+    Lwm2mObjectInstance,
+    Lwm2mResourceValue,
 )
 
-from .leshan_client import LeshanClient, Lwm2mClient, Lwm2mObjectInstance, Lwm2mResourceValue
-
 _LOGGER = logging.getLogger(__name__)
+
 
 @dataclass
 class LeshanLwm2mCoordinatorPollListEntry:
     """Entry for the poll list."""
+
     client: Lwm2mClient
     """The client to poll."""
 
     instances: list[Lwm2mObjectInstance] = field(default_factory=list)
     """The instances to poll."""
 
+
 @dataclass
 class LeshanLwm2mPollResult:
     """The result of a poll."""
+
     client: Lwm2mClient
     """The client that was polled."""
 
@@ -36,14 +42,17 @@ class LeshanLwm2mPollResult:
     resources: list[Lwm2mResourceValue] = field(default_factory=list)
     """The resources of the instance that was polled"""
 
+
 @dataclass
 class LeshanLwm2mCoordinatorData:
     """Data for the Leshan LWM2M coordinator."""
+
     clients: list[Lwm2mClient]
     """The clients connected to the server."""
 
     poll_results: list[LeshanLwm2mPollResult] = field(default_factory=list)
     """The results of the polling."""
+
 
 class LeshanLwm2mCoordinator(DataUpdateCoordinator):
     """A coordinator for Leshan LWM2M integration."""
@@ -67,12 +76,15 @@ class LeshanLwm2mCoordinator(DataUpdateCoordinator):
 
         # initialize the leshan client
         self.leshan_client = LeshanClient(
-            host=self.host,
-            session=async_create_clientsession(hass)
+            host=self.host, session=async_create_clientsession(hass)
         )
 
-    def add_to_poll_list(self, client: Lwm2mClient, instances: list[Lwm2mObjectInstance]):
-        self._poll_list.append(LeshanLwm2mCoordinatorPollListEntry(client=client, instances=instances))
+    def add_to_poll_list(
+        self, client: Lwm2mClient, instances: list[Lwm2mObjectInstance]
+    ):
+        self._poll_list.append(
+            LeshanLwm2mCoordinatorPollListEntry(client=client, instances=instances)
+        )
 
     async def async_update_data(self):
         """Fetch data from Leshan server."""
@@ -82,11 +94,16 @@ class LeshanLwm2mCoordinator(DataUpdateCoordinator):
             for poll_entry in self._poll_list:
                 for instance in poll_entry.instances:
                     resources = await self.leshan_client.read(
-                        endpoint=poll_entry.client.endpoint,
-                        object_id=instance.object_id,
-                        instance_id=instance.instance_id
+                        client=poll_entry.client,
+                        object_instance=instance,
                     )
-                    poll_results.append(LeshanLwm2mPollResult(client=poll_entry.client, instance=instance, resources=resources))
+                    poll_results.append(
+                        LeshanLwm2mPollResult(
+                            client=poll_entry.client,
+                            instance=instance,
+                            resources=resources,
+                        )
+                    )
         except Exception as e:
             raise UpdateFailed(f"Error fetching data: {e}") from e
 

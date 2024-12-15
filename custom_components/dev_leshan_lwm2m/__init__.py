@@ -1,6 +1,7 @@
 """
 The Leshan LWM2M integration.
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -28,11 +29,11 @@ PLATFORMS = [
 
 DISCOVERY_INTERVAL = timedelta(minutes=15)
 
+
 @dataclass
 class RuntimeData:
-    """
-    Holds the runtime data for the integration.
-    """
+    """Holds the runtime data for the integration."""
+
     coordinator: LeshanLwm2mCoordinator
     cancel_update_listener: Callable
     known_clients: list[Lwm2mClient] = field(default_factory=list)
@@ -68,7 +69,6 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     #     else:
     #         _LOGGER.info(f"Client {client.endpoint} is known")
 
-
     # hass.async_create_task(
     #     target=coordinator.leshan_client.listen_registrations(_async_handle_client_registration),
     #     name="leshan_client_listen_registrations"
@@ -83,10 +83,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     )
 
     # setup platforms, this calls async_setup_entry for each platform
-    for platform in PLATFORMS:
-        hass.async_create_task(
-            hass.config_entries.async_forward_entry_setup(config_entry, platform)
-        )
+    await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
 
     # all went well
     return True
@@ -98,7 +95,9 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> 
     hass.data[DOMAIN][config_entry.entry_id].cancel_update_listener()
 
     # unload platforms
-    unload_ok = await hass.config_entries.async_unload_platforms(config_entry, PLATFORMS)
+    unload_ok = await hass.config_entries.async_unload_platforms(
+        config_entry, PLATFORMS
+    )
 
     # remove the config entry from hass data object
     if unload_ok:
@@ -106,11 +105,17 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> 
 
     return unload_ok
 
-async def _async_update_listener(hass: HomeAssistant, config_entry: ConfigEntry):
+
+async def _async_update_listener(
+    hass: HomeAssistant, config_entry: ConfigEntry
+) -> None:
     """Handle updates in the config flow options."""
     # reload the integration when options change
     await hass.config_entries.async_reload(config_entry.entry_id)
 
-async def async_remove_config_entry_device(hass: HomeAssistant, config_entry: ConfigEntry, device_entry: DeviceEntry) -> bool:
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, config_entry: ConfigEntry, device_entry: DeviceEntry
+) -> bool:
     """Delete a device if selected from the UI."""
     return True
