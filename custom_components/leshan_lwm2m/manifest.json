@@ -1,5 +1,5 @@
 {
-  "domain": "dev_leshan_lwm2m",
+  "domain": "leshan_lwm2m",
   "name": "Leshan LwM2M",
   "codeowners": [],
   "dependencies": [],
