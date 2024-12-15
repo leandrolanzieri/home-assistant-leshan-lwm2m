@@ -112,12 +112,15 @@ class LeshanLwm2mSwitch(LeshanLwm2mEntity, BinarySensorEntity):
                 object_instance=self.instance,
                 resource_id=LWM2M_IPSO_ON_OFF_SWITCH_APPLICATION_TYPE_RESOURCE_ID,
             )
-            assert len(switch) == 1
+
+            if len(switch) != 1:
+                msg = f"Expected 1 resource, got {len(switch)}"
+                _LOGGER.error(msg)
             self._name = str(switch[0].value)
+
         except Exception as e:
-            _LOGGER.exception(
-                f"Failed to read switch information for {self.client.endpoint}: {e}"
-            )
+            msg = f"Failed to read switch information for {self.client.endpoint}: {e}"
+            _LOGGER.exception(msg)
             return
 
         try:
@@ -126,12 +129,15 @@ class LeshanLwm2mSwitch(LeshanLwm2mEntity, BinarySensorEntity):
                 object_instance=self.instance,
                 resource_id=LWM2M_IPSO_ON_OFF_SWITCH_DIGITAL_INPUT_STATE_RESOURCE_ID,
             )
-            assert len(switch) == 1
-            self._switch_state = bool(switch[0].value)
+
+            if len(switch) != 1:
+                msg = f"Expected 1 resource, got {len(switch)}"
+                _LOGGER.error(msg)
+            self._name = str(switch[0].value)
+
         except Exception as e:
-            _LOGGER.exception(
-                f"Failed to read switch input for {self.client.endpoint}: {e}"
-            )
+            msg = f"Failed to read switch status for {self.client.endpoint}: {e}"
+            _LOGGER.exception(msg)
             return
 
     @property
@@ -152,5 +158,6 @@ class LeshanLwm2mSwitch(LeshanLwm2mEntity, BinarySensorEntity):
         resource_value: Lwm2mResourceValue,
     ) -> None:
         self._switch_state = bool(resource_value.value)
-        _LOGGER.debug(f"Updated switch state to {self._switch_state}")
+        msg = f"Updated switch state to {self._switch_state}"
+        _LOGGER.debug(msg)
         self.async_write_ha_state()
