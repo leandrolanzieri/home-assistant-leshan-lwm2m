@@ -133,7 +133,7 @@ class LeshanLwm2mSwitch(LeshanLwm2mEntity, BinarySensorEntity):
             if len(switch) != 1:
                 msg = f"Expected 1 resource, got {len(switch)}"
                 _LOGGER.error(msg)
-            self._name = str(switch[0].value)
+            self._switch_state = bool(switch[0].value)
 
         except Exception as e:
             msg = f"Failed to read switch status for {self.client.endpoint}: {e}"
