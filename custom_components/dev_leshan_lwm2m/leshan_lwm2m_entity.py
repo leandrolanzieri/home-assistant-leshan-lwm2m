@@ -1,25 +1,40 @@
+"""Base class for Leshan LWM2M entities."""
+
 import logging
 
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .leshan_client import Lwm2mClient, Lwm2mObjectInstance
-from .leshan_lwm2m_coordinator import LeshanLwm2mCoordinator
-
 from .const import (
     DOMAIN,
-    LWM2M_DEVICE_OBJECT_ID,
-    LWM2M_DEVICE_MANUFACTURER_RESOURCE_ID,
     LWM2M_DEVICE_FIRMWARE_VERSION_RESOURCE_ID,
     LWM2M_DEVICE_HARDWARE_VERSION_RESOURCE_ID,
+    LWM2M_DEVICE_MANUFACTURER_RESOURCE_ID,
+    LWM2M_DEVICE_OBJECT_ID,
 )
-
+from .leshan_client import Lwm2mClient, Lwm2mObjectInstance
+from .leshan_client.exceptions import (
+    LeshanClientConnectionError,
+    LeshanClientConnectionTimeoutError,
+    LeshanClientEmptyResponseError,
+    LeshanClientError,
+)
+from .leshan_lwm2m_coordinator import LeshanLwm2mCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class LeshanLwm2mEntity(CoordinatorEntity):
-    """Base class for Leshan LWM2M entities."""
+    """
+    Base class for Leshan LWM2M entities.
+
+    Args:
+        client: The LWM2M client that this entity belongs to.
+        instance: The LWM2M object instance that this entity belongs to.
+        coordinator: The coordinator for the LWM2M entities.
+        server_name: The name of the LWM2M server that this entity belongs to.
+
+    """
 
     _attr_should_poll = False
 
@@ -30,6 +45,7 @@ class LeshanLwm2mEntity(CoordinatorEntity):
         coordinator: LeshanLwm2mCoordinator,
         server_name: str,
     ) -> None:
+        """Initialize the LWM2M entity."""
         super().__init__(coordinator)
         self.client = client
         """The LWM2M client that this entity belongs to."""
@@ -52,9 +68,6 @@ class LeshanLwm2mEntity(CoordinatorEntity):
         self.firmware_version = None
         """The firmware version of the device."""
 
-        self.entity_description = None
-        """The entity description."""
-
     async def async_update_device_info(self) -> None:
         """Update the device information."""
         await self.read_device_info()
@@ -72,19 +85,23 @@ class LeshanLwm2mEntity(CoordinatorEntity):
             device = await self.coordinator.leshan_client.read(
                 client=self.client, object_instance=instance
             )
-        except Exception as e:
-            _LOGGER.error(
-                f"Failed to read device information for {self.client.endpoint}: {e}"
-            )
+        except (
+            LeshanClientError,
+            LeshanClientConnectionError,
+            LeshanClientConnectionTimeoutError,
+            LeshanClientEmptyResponseError,
+        ) as e:
+            msg = f"Failed to read device information for {self.client.endpoint}: {e}"
+            _LOGGER.exception(msg)
             return
 
         for resource in device:
             if resource.resource_id == LWM2M_DEVICE_MANUFACTURER_RESOURCE_ID:
-                self.manufacturer = resource.value
+                self.manufacturer = str(resource.value)
             if resource.resource_id == LWM2M_DEVICE_FIRMWARE_VERSION_RESOURCE_ID:
-                self.firmware_version = resource.value
+                self.firmware_version = str(resource.value)
             if resource.resource_id == LWM2M_DEVICE_HARDWARE_VERSION_RESOURCE_ID:
-                self.hardware_version = resource.value
+                self.hardware_version = str(resource.value)
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -100,4 +117,8 @@ class LeshanLwm2mEntity(CoordinatorEntity):
 
     @property
     def unique_id(self) -> str:
-        return f"{self.client.endpoint}_{self.instance.object_id}_{self.instance.instance_id}"
+        """Return the unique ID of the entity."""
+        id_value = f"{self.client.endpoint}"
+        id_value += f"_{self.instance.object_id}"
+        id_value += f"_{self.instance.instance_id}"
+        return id_value
