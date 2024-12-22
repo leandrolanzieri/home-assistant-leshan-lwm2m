@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from asyncio import Task
 import logging
 from dataclasses import dataclass, field
-from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from homeassistant import config_entries
@@ -17,6 +15,7 @@ from .const import DOMAIN
 from .leshan_lwm2m_coordinator import LeshanLwm2mCoordinator
 
 if TYPE_CHECKING:
+    from asyncio import Task
     from collections.abc import Callable
 
     from homeassistant.config_entries import ConfigEntry
@@ -30,8 +29,6 @@ PLATFORMS = [
     Platform.LIGHT,
     Platform.BINARY_SENSOR,
 ]
-
-DISCOVERY_INTERVAL = timedelta(minutes=15)
 
 
 @dataclass
@@ -47,6 +44,8 @@ class RuntimeData:
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Set up a config entry."""
     hass.data.setdefault(DOMAIN, {})
+
+    _LOGGER.warning("Setting up entry %s", config_entry.entry_id)
 
     # initialize the coordinator that fetches data from the Leshan server
     coordinator = LeshanLwm2mCoordinator(hass, config_entry)
