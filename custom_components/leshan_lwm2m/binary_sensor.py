@@ -51,7 +51,6 @@ async def async_setup_entry(
                     coordinator=coordinator,
                     server_name=config_entry.title,
                 )
-                await switch.observe_resource()
                 await switch.async_update_device_info()
 
                 switch_entities.append(switch)
@@ -80,8 +79,8 @@ class LeshanLwm2mSwitch(LeshanLwm2mEntity, BinarySensorEntity):
         self._switch_state: bool | None = None
         self._name: str | None = None
 
-    async def observe_resource(self) -> None:
-        """Observe the digital input state resource."""
+    async def async_added_to_hass(self) -> None:
+        """Observe the digital input state resource when entity added to HASS."""
         await self.coordinator.leshan_client.observe(
             client=self.client,
             instance=self.instance,
