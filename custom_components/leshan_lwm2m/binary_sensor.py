@@ -88,6 +88,14 @@ class LeshanLwm2mSwitch(LeshanLwm2mEntity, BinarySensorEntity):
             callback=self._handle_digital_input_update,
         )
 
+    async def async_will_remove_from_hass(self) -> None:
+        """Remove the observation when the entity is removed from HASS."""
+        await self.coordinator.leshan_client.cancel_observe(
+            client=self.client,
+            object_instance=self.instance,
+            resource_id=LWM2M_IPSO_ON_OFF_SWITCH_DIGITAL_INPUT_STATE_RESOURCE_ID,
+        )
+
     async def async_update_device_info(self) -> None:
         """Update the device info."""
         await super().async_update_device_info()
