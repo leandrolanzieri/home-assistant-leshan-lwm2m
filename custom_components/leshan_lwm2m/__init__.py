@@ -25,10 +25,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [
-    Platform.LIGHT,
-    Platform.BINARY_SENSOR,
-]
+PLATFORMS = [Platform.LIGHT, Platform.BINARY_SENSOR, Platform.SENSOR]
 
 
 @dataclass

@@ -12,6 +12,7 @@ _Home Assistant integration for your [LwM2M][lwm2m-doc] devices._
 
 Platform | LwM2M Object ID | Description |
 | -- | -- | -- |
+`sensor` | 3301, 3303, 3304, 3315, 3316, 3317 | A sensor, currently supported: temperature, current, pressure, illuminance, humidity, voltage. |
 `binary_sensor` | 3342 | A read-only boolean sensor (e.g., a switch).
 `light` | 3311 | Control a light status and brightness.
 
