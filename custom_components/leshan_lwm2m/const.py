@@ -1,6 +1,6 @@
-"""Constants for the dev_leshan_lwm2m component."""
+"""Constants for the leshan_lwm2m component."""
 
-DOMAIN = "dev_leshan_lwm2m"
+DOMAIN = "leshan_lwm2m"
 
 CONF_NEW_DEVICE_SCAN_INTERVAL_DEFAULT = 60
 
