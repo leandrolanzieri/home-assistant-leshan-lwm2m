@@ -126,6 +126,20 @@ class LeshanLwm2mLight(LeshanLwm2mEntity, LightEntity):
             callback=self._handle_dimmer_update,
         )
 
+    async def async_will_remove_from_hass(self) -> None:
+        """Remove the observations when the entity is removed from HASS."""
+        await self.coordinator.leshan_client.cancel_observe(
+            client=self.client,
+            object_instance=self.instance,
+            resource_id=LWM2M_IPSO_LIGHT_CONTROL_ON_OFF_RESOURCE_ID,
+        )
+
+        await self.coordinator.leshan_client.cancel_observe(
+            client=self.client,
+            object_instance=self.instance,
+            resource_id=LWM2M_IPSO_LIGHT_CONTROL_DIMMER_RESOURCE_ID,
+        )
+
     async def _handle_on_off_update(
         self,
         _: Lwm2mClient,
