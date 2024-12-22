@@ -70,7 +70,6 @@ async def async_setup_entry(
                     coordinator=coordinator,
                     server_name=config_entry.title,
                 )
-                await light.observe_resources()
                 await light.async_update_device_info()
                 light_entities.append(light)
 
@@ -111,8 +110,8 @@ class LeshanLwm2mLight(LeshanLwm2mEntity, LightEntity):
         self._brightness: int = 0
         self._name: str = "Unknown Light"
 
-    async def observe_resources(self) -> None:
-        """Observe the light control resources."""
+    async def async_added_to_hass(self) -> None:
+        """Observe the light control resources when entity added to HASS."""
         await self.coordinator.leshan_client.observe(
             client=self.client,
             instance=self.instance,
