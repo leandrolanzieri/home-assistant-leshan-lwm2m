@@ -45,8 +45,6 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     """Set up a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    _LOGGER.warning("Setting up entry %s", config_entry.entry_id)
-
     # initialize the coordinator that fetches data from the Leshan server
     coordinator = LeshanLwm2mCoordinator(hass, config_entry)
 

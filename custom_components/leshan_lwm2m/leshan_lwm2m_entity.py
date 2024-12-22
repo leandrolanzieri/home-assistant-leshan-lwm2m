@@ -68,6 +68,9 @@ class LeshanLwm2mEntity(CoordinatorEntity):
         self.firmware_version = None
         """The firmware version of the device."""
 
+        self._available = False
+        """The availability of the entity."""
+
     async def async_update_device_info(self) -> None:
         """Update the device information."""
         await self.read_device_info()
@@ -95,6 +98,8 @@ class LeshanLwm2mEntity(CoordinatorEntity):
             _LOGGER.exception(msg)
             return
 
+        self._available = True
+
         for resource in device:
             if resource.resource_id == LWM2M_DEVICE_MANUFACTURER_RESOURCE_ID:
                 self.manufacturer = str(resource.value)
@@ -102,6 +107,11 @@ class LeshanLwm2mEntity(CoordinatorEntity):
                 self.firmware_version = str(resource.value)
             if resource.resource_id == LWM2M_DEVICE_HARDWARE_VERSION_RESOURCE_ID:
                 self.hardware_version = str(resource.value)
+
+    @property
+    def available(self) -> bool:
+        """Return the availability of the entity."""
+        return self._available
 
     @property
     def device_info(self) -> DeviceInfo:
