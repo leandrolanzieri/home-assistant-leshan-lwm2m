@@ -203,7 +203,7 @@ class LeshanClient:
         Raises:
             LesanClientError: If the server returns an error.
             LesanClientConnectionError: If there is an error connecting to the server.
-            LesanClientConnectionTimeoutError: If the connection to the server times out.
+            LesanClientConnectionTimeoutError: If the connection times out.
             LeshanClientEmptyResponseError: If the server returns an empty response.
 
         """
