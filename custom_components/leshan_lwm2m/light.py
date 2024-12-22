@@ -114,14 +114,14 @@ class LeshanLwm2mLight(LeshanLwm2mEntity, LightEntity):
         """Observe the light control resources when entity added to HASS."""
         await self.coordinator.leshan_client.observe(
             client=self.client,
-            instance=self.instance,
+            object_instance=self.instance,
             resource_id=LWM2M_IPSO_LIGHT_CONTROL_ON_OFF_RESOURCE_ID,
             callback=self._handle_on_off_update,
         )
 
         await self.coordinator.leshan_client.observe(
             client=self.client,
-            instance=self.instance,
+            object_instance=self.instance,
             resource_id=LWM2M_IPSO_LIGHT_CONTROL_DIMMER_RESOURCE_ID,
             callback=self._handle_dimmer_update,
         )

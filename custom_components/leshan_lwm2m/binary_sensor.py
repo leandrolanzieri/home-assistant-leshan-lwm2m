@@ -83,7 +83,7 @@ class LeshanLwm2mSwitch(LeshanLwm2mEntity, BinarySensorEntity):
         """Observe the digital input state resource when entity added to HASS."""
         await self.coordinator.leshan_client.observe(
             client=self.client,
-            instance=self.instance,
+            object_instance=self.instance,
             resource_id=LWM2M_IPSO_ON_OFF_SWITCH_DIGITAL_INPUT_STATE_RESOURCE_ID,
             callback=self._handle_digital_input_update,
         )

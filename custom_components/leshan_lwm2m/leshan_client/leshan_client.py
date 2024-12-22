@@ -419,7 +419,7 @@ class LeshanClient:
     async def observe(
         self,
         client: Lwm2mClient,
-        instance: Lwm2mObjectInstance,
+        object_instance: Lwm2mObjectInstance,
         resource_id: int,
         callback: Callable[
             [Lwm2mClient, Lwm2mObjectInstance, Lwm2mResourceValue], Awaitable[None]
@@ -437,7 +437,7 @@ class LeshanClient:
         """
         obs_entry = ObservationEntry(
             client=client,
-            instance=instance,
+            instance=object_instance,
             resource_id=resource_id,
             callback=callback,
         )
@@ -463,8 +463,8 @@ class LeshanClient:
                 )
                 self._endpoint_notification_tasks[obs_entry.client.endpoint] = task
         except Exception as e:
-            _LOGGER.error(
-                f"Failed to listen for notifications from {obs_entry.client}: {e}"
+            _LOGGER.exception(
+                "Failed to listen for notifications from %s", obs_entry.client
             )
 
         self._observations.append(obs_entry)
